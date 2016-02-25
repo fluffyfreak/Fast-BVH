@@ -58,3 +58,5 @@ result
 *.sgm
 .vs/
 *.user
+x64/
+x86/
