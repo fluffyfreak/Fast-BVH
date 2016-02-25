@@ -60,3 +60,4 @@ result
 *.user
 x64/
 x86/
+*.ppm
