@@ -205,10 +205,10 @@ void BVH::build()
 			continue;
 
 		// Set the split dimensions
-		uint32_t split_dim = bc.maxDimension();
+		const uint32_t split_dim = bc.maxDimension();
 
 		// Split on the center of the longest axis
-		float split_coord = .5f * (bc.min[split_dim] + bc.max[split_dim]);
+		const float split_coord = .5f * (bc.min[split_dim] + bc.max[split_dim]);
 
 		// Partition the list of objects on this split
 		uint32_t mid = start;

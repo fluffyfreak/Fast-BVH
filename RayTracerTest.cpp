@@ -1,7 +1,9 @@
 #include <cstdio>
 #include <vector>
+#include <array>
 #include <cstdlib>
 #include <algorithm>
+#include <memory>
 #include <cstdint>
 #include "BVH.h"
 #include "Sphere.h"
@@ -22,6 +24,7 @@ int main(int argc, char **argv) {
 	// Create a million spheres packed in the space of a cube
 	const unsigned int N = 1000000;
 	vector<BVHObject*> objects;
+	objects.reserve(N);
 	printf("Constructing %d spheres...\n", N);
 	for (size_t i = 0; i < N; ++i) {
 		objects.push_back(new Sphere(randVector3(), .005f));
@@ -32,7 +35,7 @@ int main(int argc, char **argv) {
 
 	// Allocate space for some image pixels
 	const unsigned int width = 800, height = 800;
-	float* pixels = new float[width*height * 3];
+	std::unique_ptr<float[]> pixels( new float[width*height*3] );
 
 	// Create a camera from position and focus point
 	Vector3 camera_position(1.6f, 1.3f, 1.6f);
@@ -93,5 +96,5 @@ int main(int argc, char **argv) {
 	fclose(image);
 
 	// Cleanup
-	delete[] pixels;
+	pixels.reset();
 }
