@@ -16,9 +16,9 @@ struct BVHTraversal {
 //! - In the case where we want to find out of there is _ANY_ intersection at all,
 //!   set occlusion == true, in which case we exit on the first hit, rather
 //!   than find the closest.
-bool BVH::getIntersection(const Ray& ray, IntersectionInfo* intersection, bool occlusion) const {
-	intersection->t = 999999999.f;
-	intersection->object = NULL;
+bool BVH::getIntersection(const Ray &ray, IntersectionInfo &intersection, bool occlusion) const {
+	intersection.t = 999999999.f;
+	intersection.object = NULL;
 	float bbhits[4];
 	int32_t closer, other;
 
@@ -38,7 +38,7 @@ bool BVH::getIntersection(const Ray& ray, IntersectionInfo* intersection, bool o
 		const BVHFlatNode &node(flatTree[ni]);
 
 		// If this node is further than the closest found intersection, continue
-		if (near > intersection->t)
+		if (near > intersection.t)
 			continue;
 
 		// Is leaf -> Intersect
@@ -56,17 +56,17 @@ bool BVH::getIntersection(const Ray& ray, IntersectionInfo* intersection, bool o
 					}
 
 					// Otherwise, keep the closest intersection only
-					if (current.t < intersection->t) {
-						*intersection = current;
+					if (current.t < intersection.t) {
+						intersection = current;
 					}
 				}
 			}
 
 		}
-		else { // Not a leaf
-
-			bool hitc0 = flatTree[ni + 1].bbox.intersect(ray, bbhits, bbhits + 1);
-			bool hitc1 = flatTree[ni + node.rightOffset].bbox.intersect(ray, bbhits + 2, bbhits + 3);
+		else // Not a leaf
+		{ 
+			const bool hitc0 = flatTree[ni + 1].bbox.intersect(ray, bbhits, bbhits + 1);
+			const bool hitc1 = flatTree[ni + node.rightOffset].bbox.intersect(ray, bbhits + 2, bbhits + 3);
 
 			// Did we hit both nodes?
 			if (hitc0 && hitc1) {
@@ -83,7 +83,7 @@ bool BVH::getIntersection(const Ray& ray, IntersectionInfo* intersection, bool o
 				}
 
 				// It's possible that the nearest object is still in the other side, but we'll
-				// check the further-awar node later...
+				// check the further-away node later...
 
 				// Push the farther first
 				todo[++stackptr] = BVHTraversal(other, bbhits[2]);
@@ -104,10 +104,10 @@ bool BVH::getIntersection(const Ray& ray, IntersectionInfo* intersection, bool o
 	}
 
 	// If we hit something,
-	if (intersection->object != NULL)
-		intersection->hit = ray.o + ray.d * intersection->t;
+	if (intersection.object != NULL)
+		intersection.hit = ray.o + ray.d * intersection.t;
 
-	return intersection->object != NULL;
+	return intersection.object != NULL;
 }
 
 BVH::~BVH() {
@@ -208,7 +208,7 @@ void BVH::build()
 		const uint32_t split_dim = bc.maxDimension();
 
 		// Split on the center of the longest axis
-		const float split_coord = .5f * (bc.min[split_dim] + bc.max[split_dim]);
+		const float split_coord = .5f * (bc.mMin[split_dim] + bc.mMax[split_dim]);
 
 		// Partition the list of objects on this split
 		uint32_t mid = start;

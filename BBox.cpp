@@ -1,37 +1,37 @@
 #include "BBox.h"
 #include <algorithm>
 
-BBox::BBox(const Vector3& min, const Vector3& max)
-	: min(min), max(max) {
-	extent = max - min;
+BBox::BBox(const float3& min, const float3& max)
+	: mMin(min), mMax(max) {
+	mExtent = max - min;
 }
 
-BBox::BBox(const Vector3& p)
-	: min(p), max(p) {
-	extent = max - min;
+BBox::BBox(const float3& p)
+	: mMin(p), mMax(p) {
+	mExtent = mMax - mMin;
 }
 
-void BBox::expandToInclude(const Vector3& p) {
-	min = ::min(min, p);
-	max = ::max(max, p);
-	extent = max - min;
+void BBox::expandToInclude(const float3& p) {
+	mMin = ::min(mMin, p);
+	mMax = ::max(mMax, p);
+	mExtent = mMax - mMin;
 }
 
 void BBox::expandToInclude(const BBox& b) {
-	min = ::min(min, b.min);
-	max = ::max(max, b.max);
-	extent = max - min;
+	mMin = ::min(mMin, b.mMin);
+	mMax = ::max(mMax, b.mMax);
+	mExtent = mMax - mMin;
 }
 
 uint32_t BBox::maxDimension() const {
 	uint32_t result = 0;
-	if (extent.y > extent.x) result = 1;
-	if (extent.z > extent.y) result = 2;
+	if (mExtent.y() > mExtent.x()) result = 1;
+	if (mExtent.z() > mExtent.y()) result = 2;
 	return result;
 }
 
 float BBox::surfaceArea() const {
-	return 2.f*(extent.x*extent.z + extent.x*extent.y + extent.y*extent.z);
+	return 2.f*(mExtent.x()*mExtent.z() + mExtent.x()*mExtent.y() + mExtent.y()*mExtent.z());
 }
 
 // http://www.flipcode.com/archives/SSE_RayBox_Intersection_Test.shtml
@@ -54,8 +54,8 @@ static const float __attribute__((aligned(16)))
 #endif
 ps_cst_plus_inf[4] = { flt_plus_inf,  flt_plus_inf,  flt_plus_inf,  flt_plus_inf },
 ps_cst_minus_inf[4] = { -flt_plus_inf, -flt_plus_inf, -flt_plus_inf, -flt_plus_inf };
-bool BBox::intersect(const Ray& ray, float *tnear, float *tfar) const {
-
+bool BBox::intersect(const Ray& ray, float *tnear, float *tfar) const
+{
 	// you may already have those values hanging around somewhere
 	const __m128
 		plus_inf = loadps(ps_cst_plus_inf),
@@ -63,8 +63,8 @@ bool BBox::intersect(const Ray& ray, float *tnear, float *tfar) const {
 
 	// use whatever's apropriate to load.
 	const __m128
-		box_min = loadps(&min),
-		box_max = loadps(&max),
+		box_min = loadps(&mMin),
+		box_max = loadps(&mMax),
 		pos = loadps(&ray.o),
 		inv_dir = loadps(&ray.inv_d);
 

@@ -1,95 +1,166 @@
-#ifndef Vector3_h
-#define Vector3_h
+#pragma once
 
-#include <string>
-#include <cmath>
-#include <emmintrin.h>
-#include <pmmintrin.h>
-#include "Log.h"
+// The basic set of headers we need.
+// Header rule 101: Don't pull in more than you need to.
+// In particular, don't include stdio.h, windows.h or STL in headers
+// that get used everywhere. Your compilation speed will skyrocket.
+#include <stdint.h>
+#include <math.h>
+#include <xmmintrin.h>
 
-// SSE Vector object
-struct Vector3 {
-	// This is silly, but it still helps.
-#ifdef _MSC_VER
-	union _MM_ALIGN16 {
-#else
-	union __attribute__((aligned(16))) {
-#endif
-		struct { float x, y, z, w; };
-		__m128 m128;
-	};
+// If you want it inlined, inline it.
+// If you don't want it inlined, don't inline it.
+// There is no in-between. Make your mind up :)
+#define VM_INLINE	__forceinline
 
-	Vector3() { }
-	Vector3(float x, float y, float z, float w = 0.f) : m128(_mm_set_ps(w, z, y, x)) { }
-	Vector3(const __m128& m128) : m128(m128) { }
+// Some helpers.
+#define M_PI        3.14159265358979323846f
+#define DEG2RAD(_a)	((_a)*M_PI/180.0f)
+#define RAD2DEG(_a)	((_a)*180.0f/M_PI)
+#define INT_MIN     (-2147483647 - 1)
+#define INT_MAX     2147483647
+#define FLT_MAX     3.402823466e+38F
 
-	__forceinline Vector3 operator+(const Vector3& b) const { return _mm_add_ps(m128, b.m128); }
-	__forceinline Vector3 operator-(const Vector3& b) const { return _mm_sub_ps(m128, b.m128); }
-	__forceinline Vector3 operator*(float b) const { return _mm_mul_ps(m128, _mm_set_ps(b, b, b, b)); }
-	__forceinline Vector3 operator/(float b) const { return _mm_div_ps(m128, _mm_set_ps(b, b, b, b)); }
+// Shuffle helpers.
+// Examples: SHUFFLE3(v, 0,1,2) leaves the vector unchanged.
+//           SHUFFLE3(v, 0,0,0) splats the X coord out.
+#define SHUFFLE3(V, X,Y,Z) float3(_mm_shuffle_ps((V).m, (V).m, _MM_SHUFFLE(Z,Z,Y,X)))
 
-	// Component-wise multiply and divide
-	__forceinline Vector3 cmul(const Vector3& b) const { return _mm_mul_ps(m128, b.m128); }
-	__forceinline Vector3 cdiv(const Vector3& b) const { return _mm_div_ps(m128, b.m128); }
+// A basic float3 class.
+// We try to maintain HLSL syntax as much as we can.
+struct float3
+{
+	// Constructors.
+	VM_INLINE float3() {}
+	VM_INLINE explicit float3(const float *p) { m = _mm_set_ps(p[2], p[2], p[1], p[0]); }
+	VM_INLINE explicit float3(float x, float y, float z) { m = _mm_set_ps(z, z, y, x); }
+	VM_INLINE explicit float3(__m128 v) { m = v; }
 
-	// dot (inner) product
-	__forceinline float operator*(const Vector3& b) const {
-		return x*b.x + y*b.y + z*b.z;
+	// Member accessors.
+	// In an ideal world, we'd just use a union and allow the caller to access .x directly.
+	// Unfortunately __m128 requires us to write wrappers. This sucks, and breaks HLSL
+	// compatibility, but what can you do.
+	VM_INLINE float x() const { return _mm_cvtss_f32(m); }
+	VM_INLINE float y() const { return _mm_cvtss_f32(_mm_shuffle_ps(m, m, _MM_SHUFFLE(1, 1, 1, 1))); }
+	VM_INLINE float z() const { return _mm_cvtss_f32(_mm_shuffle_ps(m, m, _MM_SHUFFLE(2, 2, 2, 2))); }
+
+	// Helpers for common swizzles.
+	VM_INLINE float3 yzx() const { return SHUFFLE3(*this, 1, 2, 0); }
+	VM_INLINE float3 zxy() const { return SHUFFLE3(*this, 2, 0, 1); }
+
+	// Unaligned store.
+	VM_INLINE void store(float *p) const { p[0] = x(); p[1] = y(); p[2] = z(); }
+
+	// Accessors to write to the components directly.
+	// Generally speaking you should prefer to construct a new vector, rather than
+	// modifiying the components of an existing vector.
+	void setX(float x)
+	{
+		m = _mm_move_ss(m, _mm_set_ss(x));
+	}
+	void setY(float y)
+	{
+		__m128 t = _mm_move_ss(m, _mm_set_ss(y));
+		t = _mm_shuffle_ps(t, t, _MM_SHUFFLE(3, 2, 0, 0));
+		m = _mm_move_ss(t, m);
+	}
+	void setZ(float z)
+	{
+		__m128 t = _mm_move_ss(m, _mm_set_ss(z));
+		t = _mm_shuffle_ps(t, t, _MM_SHUFFLE(3, 0, 1, 0));
+		m = _mm_move_ss(t, m);
 	}
 
-	// Cross Product
-	__forceinline Vector3 operator^(const Vector3& b) const {
-		return _mm_sub_ps(
-			_mm_mul_ps(
-				_mm_shuffle_ps(m128, m128, _MM_SHUFFLE(3, 0, 2, 1)),
-				_mm_shuffle_ps(b.m128, b.m128, _MM_SHUFFLE(3, 1, 0, 2))),
-			_mm_mul_ps(
-				_mm_shuffle_ps(m128, m128, _MM_SHUFFLE(3, 1, 0, 2)),
-				_mm_shuffle_ps(b.m128, b.m128, _MM_SHUFFLE(3, 0, 2, 1)))
-			);
-	}
+	// For things that really need array-style access.
+	VM_INLINE float operator[] (size_t i) const { return m.m128_f32[i]; };
+	VM_INLINE float& operator[] (size_t i) { return m.m128_f32[i]; };
 
-	__forceinline Vector3 operator/(const Vector3& b) const { return _mm_div_ps(m128, b.m128); }
-
-	// Handy component indexing
-	__forceinline float& operator[](const unsigned int i) { return (&x)[i]; }
-	__forceinline const float& operator[](const unsigned int i) const { return (&x)[i]; }
+	__m128 m;
 };
 
-__forceinline Vector3 operator*(float a, const Vector3&b) { return _mm_mul_ps(_mm_set1_ps(a), b.m128); }
+// A small helper to easily load integer arguments without having
+// to manually cast everything.
+VM_INLINE float3 float3i(int x, int y, int z) { return float3((float)x, (float)y, (float)z); }
 
-// Component-wise min
-__forceinline Vector3 min(const Vector3& a, const Vector3& b) {
-	return _mm_min_ps(a.m128, b.m128);
+// Helpers for initializing static data.
+#define VCONST extern const __declspec(selectany)
+struct vconstu
+{
+	union { uint32_t u[4]; __m128 v; };
+	inline operator __m128() const { return v; }
+};
+
+VCONST vconstu vsignbits = { 0x80000000, 0x80000000, 0x80000000, 0x80000000 };
+
+// Comparison operators need to return a SIMD bool.
+// We'll just keep it simple here, but if you want you can actually implement
+// this as a separate type with it's own operations.
+typedef float3 bool3;
+
+// Basic binary operators.
+// Notice that these are all inline. It's not useful to us to ever actually
+// step into these in the debugger, even in debug builds.
+VM_INLINE float3 operator+ (float3 a, float3 b) { a.m = _mm_add_ps(a.m, b.m); return a; }
+VM_INLINE float3 operator- (float3 a, float3 b) { a.m = _mm_sub_ps(a.m, b.m); return a; }
+VM_INLINE float3 operator* (float3 a, float3 b) { a.m = _mm_mul_ps(a.m, b.m); return a; }
+VM_INLINE float3 operator/ (float3 a, float3 b) { a.m = _mm_div_ps(a.m, b.m); return a; }
+VM_INLINE float3 operator* (float3 a, float b) { a.m = _mm_mul_ps(a.m, _mm_set1_ps(b)); return a; }
+VM_INLINE float3 operator/ (float3 a, float b) { a.m = _mm_div_ps(a.m, _mm_set1_ps(b)); return a; }
+VM_INLINE float3 operator* (float a, float3 b) { b.m = _mm_mul_ps(_mm_set1_ps(a), b.m); return b; }
+VM_INLINE float3 operator/ (float a, float3 b) { b.m = _mm_div_ps(_mm_set1_ps(a), b.m); return b; }
+VM_INLINE float3& operator+= (float3 &a, float3 b) { a = a + b; return a; }
+VM_INLINE float3& operator-= (float3 &a, float3 b) { a = a - b; return a; }
+VM_INLINE float3& operator*= (float3 &a, float3 b) { a = a * b; return a; }
+VM_INLINE float3& operator/= (float3 &a, float3 b) { a = a / b; return a; }
+VM_INLINE float3& operator*= (float3 &a, float b) { a = a * b; return a; }
+VM_INLINE float3& operator/= (float3 &a, float b) { a = a / b; return a; }
+VM_INLINE bool3 operator==(float3 a, float3 b) { a.m = _mm_cmpeq_ps(a.m, b.m); return a; }
+VM_INLINE bool3 operator!=(float3 a, float3 b) { a.m = _mm_cmpneq_ps(a.m, b.m); return a; }
+VM_INLINE bool3 operator< (float3 a, float3 b) { a.m = _mm_cmplt_ps(a.m, b.m); return a; }
+VM_INLINE bool3 operator> (float3 a, float3 b) { a.m = _mm_cmpgt_ps(a.m, b.m); return a; }
+VM_INLINE bool3 operator<=(float3 a, float3 b) { a.m = _mm_cmple_ps(a.m, b.m); return a; }
+VM_INLINE bool3 operator>=(float3 a, float3 b) { a.m = _mm_cmpge_ps(a.m, b.m); return a; }
+VM_INLINE float3 min(float3 a, float3 b) { a.m = _mm_min_ps(a.m, b.m); return a; }
+VM_INLINE float3 max(float3 a, float3 b) { a.m = _mm_max_ps(a.m, b.m); return a; }
+
+// Unary operators.
+VM_INLINE float3 operator- (float3 a) { return float3(_mm_setzero_ps()) - a; }
+VM_INLINE float3 abs(float3 v) { v.m = _mm_andnot_ps(vsignbits, v.m); return v; }
+
+// Horizontal min/max.
+VM_INLINE float hmin(float3 v) {
+	v = min(v, SHUFFLE3(v, 1, 0, 2));
+	return min(v, SHUFFLE3(v, 2, 0, 1)).x();
 }
 
-// Component-wise max
-__forceinline Vector3 max(const Vector3& a, const Vector3& b) {
-	return _mm_max_ps(a.m128, b.m128);
+VM_INLINE float hmax(float3 v) {
+	v = max(v, SHUFFLE3(v, 1, 0, 2));
+	return max(v, SHUFFLE3(v, 2, 0, 1)).x();
 }
 
-// Length of a vector
-__forceinline float length(const Vector3& a) {
-	return sqrtf(a*a);
+// 3D cross product.
+VM_INLINE float3 cross(float3 a, float3 b) {
+	// x  <-  a.y*b.z - a.z*b.y
+	// y  <-  a.z*b.x - a.x*b.z
+	// z  <-  a.x*b.y - a.y*b.x
+	// We can save a shuffle by grouping it in this wacky order:
+	return (a.zxy()*b - a*b.zxy()).zxy();
 }
 
-// Make a vector unit length
-__forceinline Vector3 normalize(const Vector3& in) {
-	Vector3 a = in;
-	a.w = 0.f;
+// Returns a 3-bit code where bit0..bit2 is X..Z
+VM_INLINE unsigned mask(float3 v) { return _mm_movemask_ps(v.m) & 7; }
 
-	__m128 D = a.m128;
-	D = _mm_mul_ps(D, D);
-	D = _mm_hadd_ps(D, D);
-	D = _mm_hadd_ps(D, D);
+// Once we have a comparison, we can branch based on its results:
+VM_INLINE bool any(bool3 v) { return mask(v) != 0; }
+VM_INLINE bool all(bool3 v) { return mask(v) == 7; }
 
-	// 1 iteration of Newton-raphson -- Idea from Intel's Embree.
-	__m128 r = _mm_rsqrt_ps(D);
-	r = _mm_add_ps(
-		_mm_mul_ps(_mm_set_ps(1.5f, 1.5f, 1.5f, 1.5f), r),
-		_mm_mul_ps(_mm_mul_ps(_mm_mul_ps(D, _mm_set_ps(-0.5f, -0.5f, -0.5f, -0.5f)), r), _mm_mul_ps(r, r)));
+// Let's fill out the rest of the HLSL standard libary:
+// (there's a few more but this will do to get you started)
+VM_INLINE float3 clamp(float3 t, float3 a, float3 b) { return min(max(t, a), b); }
+VM_INLINE float sum(float3 v) { return v.x() + v.y() + v.z(); }
+VM_INLINE float dot(float3 a, float3 b) { return sum(a*b); }
+VM_INLINE float length(float3 v) { return sqrtf(dot(v, v)); }
+VM_INLINE float lengthSq(float3 v) { return dot(v, v); }
+VM_INLINE float3 normalize(float3 v) { return v * (1.0f / length(v)); }
+VM_INLINE float3 lerp(float3 a, float3 b, float t) { return a + (b - a)*t; }
 
-	return _mm_mul_ps(a.m128, r);
-}
-
-#endif

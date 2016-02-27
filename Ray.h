@@ -4,12 +4,12 @@
 #include "Vector3.h"
 
 struct Ray {
-	Vector3 o; // Ray Origin
-	Vector3 d; // Ray Direction
-	Vector3 inv_d; // Inverse of each Ray Direction component
+	float3 o; // Ray Origin
+	float3 d; // Ray Direction
+	float3 inv_d; // Inverse of each Ray Direction component
 
-	Ray(const Vector3& o, const Vector3& d)
-		: o(o), d(d), inv_d(Vector3(1, 1, 1).cdiv(d)) { }
+	Ray(const float3& o, const float3& d)
+		: o(o), d(d), inv_d(float3(1, 1, 1)/d) { }
 };
 
 #endif

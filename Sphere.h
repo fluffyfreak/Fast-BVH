@@ -6,16 +6,16 @@
 
 //! For the purposes of demonstrating the BVH, a simple sphere
 struct Sphere : public BVHObject {
-	Vector3 center; // Center of the sphere
+	float3 center; // Center of the sphere
 	float r, r2; // Radius, Radius^2
 
-	Sphere(const Vector3& center, float radius)
+	Sphere(const float3& center, float radius)
 		: center(center), r(radius), r2(radius*radius) { }
 
 	bool getIntersection(const Ray& ray, IntersectionInfo* I) const {
-		Vector3 s = center - ray.o;
-		float sd = s * ray.d;
-		float ss = s * s;
+		float3 s = center - ray.o;
+		float sd = dot(s, ray.d);
+		float ss = dot(s, s);
 
 		// Compute discriminant
 		float disc = sd*sd - ss + r2;
@@ -29,15 +29,15 @@ struct Sphere : public BVHObject {
 		return true;
 	}
 
-	__forceinline Vector3 getNormal(const IntersectionInfo& I) const {
+	__forceinline float3 getNormal(const IntersectionInfo& I) const {
 		return normalize(I.hit - center);
 	}
 
 	__forceinline BBox getBBox() const {
-		return BBox(center - Vector3(r, r, r), center + Vector3(r, r, r));
+		return BBox(center - float3(r, r, r), center + float3(r, r, r));
 	}
 
-	__forceinline Vector3 getCentroid() const {
+	__forceinline float3 getCentroid() const {
 		return center;
 	}
 

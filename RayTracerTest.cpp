@@ -7,6 +7,7 @@
 #include <cstdint>
 #include "BVH.h"
 #include "Sphere.h"
+#include "Triangle.h"
 using std::vector;
 
 // Return a random number in [0,1]
@@ -15,19 +16,38 @@ float rand01() {
 }
 
 // Return a random vector with each component in the range [-1,1]
-Vector3 randVector3() {
-	return Vector3(rand01(), rand01(), rand01())*2.f - Vector3(1, 1, 1);
+float3 randVector3() {
+	return float3(rand01(), rand01(), rand01())*2.f - float3(1, 1, 1);
 }
 
-int main(int argc, char **argv) {
+float lmap(float val, float inMin, float inMax, float outMin, float outMax) {
+	return outMin + ((outMax - outMin) * (val - inMin)) / (inMax - inMin);
+}
 
-	// Create a million spheres packed in the space of a cube
+int __cdecl main(int argc, char **argv)
+{
+	// Create a spheres packed in the space of a cube
+#ifdef _DEBUG
+	const unsigned int N = 1000;
+#else
 	const unsigned int N = 1000000;
+#endif
 	vector<BVHObject*> objects;
 	objects.reserve(N);
-	printf("Constructing %d spheres...\n", N);
+	printf("Constructing %d BVHObjects...\n", N);
 	for (size_t i = 0; i < N; ++i) {
-		objects.push_back(new Sphere(randVector3(), .005f));
+		float3 pos(randVector3());
+		if (i % 2)
+		{
+			objects.push_back(new Sphere(pos, .005f));
+		}
+		else 
+		{
+			objects.push_back(new Triangle(
+				pos + (randVector3()*.025),
+				pos + (randVector3()*.025),
+				pos + (randVector3()*.025)));
+		}
 	}
 
 	// Compute a BVH for this object set
@@ -38,44 +58,74 @@ int main(int argc, char **argv) {
 	std::unique_ptr<float[]> pixels( new float[width*height*3] );
 
 	// Create a camera from position and focus point
-	Vector3 camera_position(1.6f, 1.3f, 1.6f);
-	Vector3 camera_focus(0.f, 0.f, 0.f);
-	Vector3 camera_up(0.f, 1.f, 0.f);
+	const float3 camera_position(1.6f, 1.3f, 1.6f);
+	const float3 camera_focus(0.f, 0.f, 0.f);
+	const float3 camera_up(0.f, 1.f, 0.f);
 
 	// Camera tangent space
-	Vector3 camera_dir = normalize(camera_focus - camera_position);
-	Vector3 camera_u = normalize(camera_dir ^ camera_up);
-	Vector3 camera_v = normalize(camera_u ^ camera_dir);
+	const float3 camera_dir = normalize(camera_focus - camera_position);
+	const float3 camera_u = normalize(cross(camera_dir, camera_up));
+	const float3 camera_v = normalize(cross(camera_u, camera_dir));
+	const float fov = .5f / tanf(70.f * 3.14159265f*.5f / 180.f);
+
+	float maxDist = std::numeric_limits<float>().min();
+	float minDist = std::numeric_limits<float>().max();
 
 	printf("Rendering image (%dx%d)...\n", width, height);
 	// Raytrace over every pixel
 #pragma omp parallel for
-	for (int32_t i = 0; i < width; ++i) {
-		for (int32_t j = 0; j < height; ++j) {
-			size_t index = 3 * (width * j + i);
+	for (int i = 0; i<width; ++i) {
+		for (int j = 0; j<height; ++j) {
+			int index = 3 * (width * j + i);
 
 			float u = (i + .5f) / (float)(width - 1) - .5f;
 			float v = (height - 1 - j + .5f) / (float)(height - 1) - .5f;
-			float fov = .5f / tanf(70.f * 3.14159265f*.5f / 180.f);
 
 			// This is only valid for square aspect ratio images
 			Ray ray(camera_position, normalize(u*camera_u + v*camera_v + fov*camera_dir));
 
 			IntersectionInfo I;
-			bool hit = bvh.getIntersection(ray, &I, false);
+			bool hit = bvh.getIntersection(ray, I, false);
+
+			if (hit) {
+				// min/max distances
+				auto iPt = ray.o + ray.d * I.t;
+				auto d = length(iPt);
+				minDist = std::min(d, minDist);
+				maxDist = std::max(d, maxDist);
+			}
+		}
+	}
+
+#pragma omp parallel for
+	for (int i = 0; i < width; ++i) {
+		for (int j = 0; j < height; ++j) {
+			int index = 3 * (width * j + i);
+
+			float u = (i + .5f) / (float)(width - 1) - .5f;
+			float v = (height - 1 - j + .5f) / (float)(height - 1) - .5f;
+
+			// This is only valid for square aspect ratio images
+			Ray ray(camera_position, normalize(u*camera_u + v*camera_v + fov*camera_dir));
+
+			IntersectionInfo I;
+			bool hit = bvh.getIntersection(ray, I, false);
 
 			if (!hit) {
 				pixels[index] = pixels[index + 1] = pixels[index + 2] = 0.f;
 			}
-			else {
-
+			else 
+			{
 				// Just for fun, we'll make the color based on the normal
-				const Vector3 normal = I.object->getNormal(I);
-				const Vector3 color(fabs(normal.x), fabs(normal.y), fabs(normal.z));
+				auto iPt = ray.o + ray.d * I.t;
 
-				pixels[index] = color.x;
-				pixels[index + 1] = color.y;
-				pixels[index + 2] = color.z;
+				auto d = length(iPt);
+				auto sVal = lmap(d, minDist, maxDist, 0.f, 1.f);
+				const float3 color(fabs(sVal), fabs(sVal), fabs(sVal));
+
+				pixels[index + 0] = color.x();
+				pixels[index + 1] = color.y();
+				pixels[index + 2] = color.z();
 			}
 		}
 	}
@@ -87,7 +137,7 @@ int main(int argc, char **argv) {
 	for (size_t j = 0; j < height; ++j) {
 		for (size_t i = 0; i < width; ++i) {
 			size_t index = 3 * (width * j + i);
-			unsigned char r = std::max(std::min(pixels[index] * 255.f, 255.f), 0.f);
+			unsigned char r = std::max(std::min(pixels[index + 0] * 255.f, 255.f), 0.f);
 			unsigned char g = std::max(std::min(pixels[index + 1] * 255.f, 255.f), 0.f);
 			unsigned char b = std::max(std::min(pixels[index + 2] * 255.f, 255.f), 0.f);
 			fprintf(image, "%c%c%c", r, g, b);
