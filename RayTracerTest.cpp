@@ -46,9 +46,9 @@ int __cdecl main(int argc, char **argv)
 		else 
 		{
 			objects.push_back(new Triangle(
-				pos + (randVector3()*.025),
-				pos + (randVector3()*.025),
-				pos + (randVector3()*.025)));
+				pos + (randVector3()*.025f),
+				pos + (randVector3()*.025f),
+				pos + (randVector3()*.025f)));
 		}
 	}
 
@@ -56,7 +56,8 @@ int __cdecl main(int argc, char **argv)
 	BVH bvh(&objects);
 
 	// Allocate space for some image pixels
-	const unsigned int width = 800, height = 800;
+	const unsigned int width = 800;
+	const unsigned int height = width;
 	std::unique_ptr<float[]> pixels( new float[width*height*3] );
 
 	// Create a camera from position and focus point
