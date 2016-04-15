@@ -8,6 +8,8 @@
 #include "BVH.h"
 #include "Sphere.h"
 #include "Triangle.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 using std::vector;
 
 // Return a random number in [0,1]
@@ -132,7 +134,7 @@ int __cdecl main(int argc, char **argv)
 
 	// Output image file (PPM Format)
 	printf("Writing out image file: \"render.ppm\"\n");
-	FILE *image = fopen("render.ppm", "w");
+	/*FILE *image = fopen("render.ppm", "w");
 	fprintf(image, "P6\n%d %d\n255\n", width, height);
 	for (size_t j = 0; j < height; ++j) {
 		for (size_t i = 0; i < width; ++i) {
@@ -143,8 +145,20 @@ int __cdecl main(int argc, char **argv)
 			fprintf(image, "%c%c%c", r, g, b);
 		}
 	}
-	fclose(image);
+	fclose(image);*/
+	std::unique_ptr<unsigned char[]> pixelsOut( new unsigned char[width*height*3] );
+	for (size_t j = 0; j < height; ++j) {
+		for (size_t i = 0; i < width; ++i) {
+			const size_t index = 3 * (width * j + i);
+			pixelsOut[index + 0] = (unsigned char)std::max(std::min(pixels[index + 0] * 255.f, 255.f), 0.f);
+			pixelsOut[index + 1] = (unsigned char)std::max(std::min(pixels[index + 1] * 255.f, 255.f), 0.f);
+			pixelsOut[index + 2] = (unsigned char)std::max(std::min(pixels[index + 2] * 255.f, 255.f), 0.f);
+		}
+	}
+	//stbi_write_tga("render.tga", width, height, 3, pixelsOut.get());
+	stbi_write_png("render.png", width, height, 3, pixelsOut.get(), width*3);
 
 	// Cleanup
 	pixels.reset();
+	pixelsOut.reset();
 }
